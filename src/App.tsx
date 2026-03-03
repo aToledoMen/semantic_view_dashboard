@@ -1,112 +1,229 @@
-import { useState } from 'react'
-import Domo from 'ryuu.js'
+import { useState, useEffect } from 'react'
+import { HeaderBar } from '@/components/HeaderBar'
+import { Sidebar } from '@/components/Sidebar'
+import { MainContent } from '@/components/MainContent'
+import { fetchCatalog, exploreData } from '@/lib/api'
+import type { CatalogResponse } from '@/types/catalog'
+import type { ExploreState } from '@/types/explore'
 
 function App() {
-  const [testData, setTestData] = useState<any>(null)
-  const [testLoading, setTestLoading] = useState(false)
-  const [testError, setTestError] = useState<string | null>(null)
+  const [catalog, setCatalog] = useState<CatalogResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleTestDataFetch = async () => {
-    setTestLoading(true)
-    setTestError(null)
-    setTestData(null)
+  const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(new Set())
+  const [selectedDimensions, setSelectedDimensions] = useState<Set<string>>(new Set())
+  const [selectedTimeGrain, setSelectedTimeGrain] = useState<string | null>(null)
+  const [dimensionFilters, setDimensionFilters] = useState<Map<string, Set<string>>>(new Map())
+  const [knownDimensionValues, setKnownDimensionValues] = useState<Map<string, string[]>>(new Map())
 
+  const [exploreState, setExploreState] = useState<ExploreState>({
+    status: 'idle',
+    result: null,
+    error: null,
+  })
+
+  const canExplore = selectedMetrics.size >= 1 && selectedDimensions.size >= 1
+
+  useEffect(() => {
+    loadCatalog()
+  }, [])
+
+  async function loadCatalog() {
+    setLoading(true)
+    setError(null)
     try {
-      // Test API call to fetch sales data
-      const data = await Domo.get('/data/v1/sales')
-      console.log('Sales data fetched:', data)
-      setTestData(data)
-    } catch (error: any) {
-      const errorMsg = error?.message || 'Unknown error occurred'
-      setTestError(errorMsg)
-      console.error('Error fetching sales data:', error)
+      const data = await fetchCatalog()
+      setCatalog(data)
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load catalog')
+      console.error('Error loading catalog:', err)
     } finally {
-      setTestLoading(false)
+      setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8">
-            <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-4">
-              Domo React Template
-            </h1>
-            <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">
-              A reusable template for building Domo custom apps with React, TypeScript, Vite, Tailwind CSS, and ShadCN components.
-            </p>
-            
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                <h2 className="text-xl font-semibold text-green-900 dark:text-green-100 mb-3">
-                  Test Domo API Connection
-                </h2>
-                <p className="text-sm text-green-800 dark:text-green-200 mb-4">
-                  Click the button below to test fetching data from the <code className="bg-green-100 dark:bg-green-900 px-1 rounded">/data/v1/sales</code> endpoint.
-                </p>
-                <button
-                  onClick={handleTestDataFetch}
-                  disabled={testLoading}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md font-medium transition-colors"
-                >
-                  {testLoading ? 'Fetching...' : 'Test API Call'}
-                </button>
+  async function handleExplore() {
+    if (!canExplore) return
 
-                {testError && (
-                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
-                    <p className="text-sm font-semibold text-red-900 dark:text-red-100 mb-1">Error:</p>
-                    <p className="text-sm text-red-800 dark:text-red-200">{testError}</p>
-                  </div>
-                )}
+    setExploreState({ status: 'loading', result: null, error: null })
 
-                {testData && (
-                  <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
-                    <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">Success! Data received:</p>
-                    <div className="bg-white dark:bg-slate-800 p-3 rounded border border-green-200 dark:border-green-700">
-                      <pre className="text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-60">
-                        {JSON.stringify(testData, null, 2)}
-                      </pre>
-                    </div>
-                    <p className="text-xs text-green-700 dark:text-green-300 mt-2">
-                      Array length: {Array.isArray(testData) ? testData.length : 'Not an array'}
-                    </p>
-                  </div>
-                )}
-              </div>
+    const filters: Record<string, string[]> = {}
+    dimensionFilters.forEach((values, dimName) => {
+      if (values.size > 0) filters[dimName] = Array.from(values)
+    })
 
-              <div className="p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                  Features
-                </h2>
-                <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                  <li>React 18 with TypeScript</li>
-                  <li>Vite for fast development and builds</li>
-                  <li>Tailwind CSS for styling</li>
-                  <li>ShadCN UI components ready to use</li>
-                  <li>Domo SDK integration</li>
-                  <li>Local development via ryuu.js</li>
-                </ul>
-              </div>
+    try {
+      const result = await exploreData(
+        Array.from(selectedMetrics),
+        Array.from(selectedDimensions),
+        selectedTimeGrain,
+        Object.keys(filters).length > 0 ? filters : undefined
+      )
+      setExploreState({ status: 'success', result, error: null })
+      extractDimensionValues(result)
+    } catch (err: any) {
+      setExploreState({
+        status: 'error',
+        result: null,
+        error: err?.message || 'Failed to explore data',
+      })
+      console.error('Error exploring:', err)
+    }
+  }
 
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <h2 className="text-xl font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                  Next Steps
-                </h2>
-                  <ol className="list-decimal list-inside space-y-1 text-blue-800 dark:text-blue-200">
-                  <li>Add ShadCN components: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">npx shadcn@latest add button</code></li>
-                  <li>Configure <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">domo/manifest.json</code> for your app</li>
-                  <li>Start building your Domo app!</li>
-                  <li>(View the README.md for more detail)</li>
-                </ol>
-              </div>
+  function toggleInSet(
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    value: string
+  ) {
+    setter((prev) => {
+      const next = new Set(prev)
+      if (next.has(value)) {
+        next.delete(value)
+      } else {
+        next.add(value)
+      }
+      return next
+    })
+  }
+
+  function handleToggleDimension(name: string) {
+    // If deselecting, clear its filters
+    if (selectedDimensions.has(name)) {
+      setDimensionFilters((prev) => {
+        const next = new Map(prev)
+        next.delete(name)
+        return next
+      })
+    }
+    toggleInSet(setSelectedDimensions, name)
+  }
+
+  function toggleDimensionFilter(dimensionName: string, value: string) {
+    setDimensionFilters((prev) => {
+      const next = new Map(prev)
+      const current = next.get(dimensionName) ?? new Set<string>()
+      const updated = new Set(current)
+      if (updated.has(value)) {
+        updated.delete(value)
+      } else {
+        updated.add(value)
+      }
+      if (updated.size === 0) {
+        next.delete(dimensionName)
+      } else {
+        next.set(dimensionName, updated)
+      }
+      return next
+    })
+  }
+
+  function clearDimensionFilter(dimensionName: string) {
+    setDimensionFilters((prev) => {
+      const next = new Map(prev)
+      next.delete(dimensionName)
+      return next
+    })
+  }
+
+  function clearAllFilters() {
+    setDimensionFilters(new Map())
+  }
+
+  function extractDimensionValues(result: ExploreState['result']) {
+    if (!result?.chart || !catalog) return
+    const dataValues = (result.chart.data as any)?.values as Record<string, unknown>[] | undefined
+    if (!dataValues || dataValues.length === 0) return
+
+    const columns = Object.keys(dataValues[0])
+    const dims = [...catalog.dimensions, ...catalog.time_dimensions]
+
+    setKnownDimensionValues((prev) => {
+      const next = new Map(prev)
+      for (const dim of dims) {
+        // Match dimension to chart column by name or display_name
+        const col = columns.find(
+          (c) =>
+            c === dim.name ||
+            c === dim.display_name ||
+            c.toLowerCase() === dim.name.toLowerCase().replace(/_/g, ' ') ||
+            c.toLowerCase() === dim.display_name.toLowerCase()
+        )
+        if (!col) continue
+        const existing = new Set(prev.get(dim.name) ?? [])
+        for (const row of dataValues) {
+          const val = row[col]
+          if (val != null && val !== '') existing.add(String(val))
+        }
+        next.set(dim.name, Array.from(existing).sort())
+      }
+      return next
+    })
+  }
+
+  const totalSelected =
+    selectedMetrics.size +
+    selectedDimensions.size +
+    (selectedTimeGrain ? 1 : 0)
+
+  if (error) {
+    return (
+      <div className="h-screen flex flex-col">
+        <HeaderBar semanticView={null} loading={false} />
+        <div className="flex-1 flex items-center justify-center bg-background">
+          <div className="text-center max-w-sm px-6">
+            <div className="mx-auto mb-4 w-14 h-14 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <span className="text-2xl">!</span>
             </div>
+            <h2 className="text-lg font-semibold text-foreground mb-2">
+              Connection Error
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <button
+              onClick={loadCatalog}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Retry
+            </button>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-screen flex flex-col overflow-hidden">
+      <HeaderBar
+        semanticView={catalog?.semantic_view ?? null}
+        loading={loading}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          catalog={catalog}
+          loading={loading}
+          selectedMetrics={selectedMetrics}
+          selectedDimensions={selectedDimensions}
+          selectedTimeGrain={selectedTimeGrain}
+          onToggleMetric={(name) => toggleInSet(setSelectedMetrics, name)}
+          onToggleDimension={handleToggleDimension}
+          onSelectTimeGrain={setSelectedTimeGrain}
+          dimensionFilters={dimensionFilters}
+          knownDimensionValues={knownDimensionValues}
+          onToggleDimensionFilter={toggleDimensionFilter}
+          onClearDimensionFilter={clearDimensionFilter}
+          onClearAllFilters={clearAllFilters}
+          canExplore={canExplore}
+          exploring={exploreState.status === 'loading'}
+          onExplore={handleExplore}
+        />
+        <MainContent
+          selectedCount={totalSelected}
+          exploreState={exploreState}
+          canExplore={canExplore}
+        />
       </div>
     </div>
   )
 }
 
 export default App
-
