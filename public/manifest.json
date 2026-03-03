@@ -1,0 +1,12 @@
+{
+  "name": "my-domo-app",
+  "version": "0.0.1",
+  "size": {
+    "width": 3,
+    "height": 3
+  },
+  "fileName": "manifest.json",
+  "datasetsMapping": [],
+  "id": "",
+  "proxyId": ""
+}
