@@ -10,152 +10,231 @@
   "id": "f7e40d21-1637-4804-be84-fa46b5c5b70f",
   "proxyId": "5f894f5e-dbd8-49e5-8ef9-8adcae40951e",
   "packagesMapping": [
-      {
-         "name": "SF Semantic View BI",
-         "alias": "getCatalog",
-         "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
-         "parameters": [
-            {
-               "name": "snowflakeAccount",
-               "displayName": "snowflakeAccount",
-               "type": "ACCOUNT",
-               "value": {
-                  "id": "627",
-                  "type": "ACCOUNT",
-                  "subType": "snowflakekeypairauthentication"
-               },
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": "snowflakekeypairauthentication",
-               "alias": "snowflakeAccount"
-            },
-            {
-               "name": "snowflakeDatabase",
-               "displayName": "snowflakeDatabase",
-               "type": "text",
-               "value": "ATM_DB",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "snowflakeDatabase"
-            },
-            {
-               "name": "snowflakeSchema",
-               "displayName": "snowflakeSchema",
-               "type": "text",
-               "value": "SALES",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "snowflakeSchema"
-            },
-            {
-               "name": "semanticView",
-               "displayName": "semanticView",
-               "type": "text",
-               "value": "TPCH_ANALYSIS",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "semanticView"
-            }
-         ],
-         "output": {
-            "name": "result",
-            "displayName": "result",
-            "type": "object",
-            "value": null,
-            "nullable": true,
-            "isList": false,
-            "children": [],
-            "entitySubType": null,
-            "alias": "result"
-         },
-         "version": "1.0.0",
-         "functionName": "getCatalog"
-      },
-      {
-         "name": "SF Semantic View BI",
-         "alias": "explore",
-         "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
-         "parameters": [
-            {
-               "name": "snowflakeAccount",
-               "displayName": "snowflakeAccount",
-               "type": "ACCOUNT",
-               "value": {
-                  "id": "627",
-                  "type": "ACCOUNT",
-                  "subType": "snowflakekeypairauthentication"
-               },
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": "snowflakekeypairauthentication",
-               "alias": "snowflakeAccount"
-            },
-            {
-               "name": "snowflakeDatabase",
-               "displayName": "snowflakeDatabase",
-               "type": "text",
-               "value": "ATM_DB",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "snowflakeDatabase"
-            },
-            {
-               "name": "snowflakeSchema",
-               "displayName": "snowflakeSchema",
-               "type": "text",
-               "value": "SALES",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "snowflakeSchema"
-            },
-            {
-               "name": "snowflakeAgent",
-               "displayName": "snowflakeAgent",
-               "type": "text",
-               "value": "TPCH_AGENT_EXAMPLE",
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "snowflakeAgent"
-            },
-            {
-               "name": "requestBody",
-               "displayName": "requestBody",
-               "type": "object",
-               "value": null,
-               "nullable": false,
-               "isList": false,
-               "children": [],
-               "entitySubType": null,
-               "alias": "requestBody"
-            }
-         ],
-         "output": {
-            "name": "result",
-            "displayName": "result",
-            "type": "object",
-            "value": null,
-            "nullable": true,
-            "isList": false,
-            "children": [],
-            "entitySubType": null,
-            "alias": "result"
-         },
-         "version": "1.0.0",
-         "functionName": "explore"
-      }
-   ]
+    {
+       "name": "SF Semantic View BI",
+       "alias": "getCatalog",
+       "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
+       "parameters": [
+          {
+             "name": "snowflakeAccount",
+             "displayName": "snowflakeAccount",
+             "type": "ACCOUNT",
+             "value": {
+                "id": "627",
+                "type": "ACCOUNT",
+                "subType": "snowflakekeypairauthentication"
+             },
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": "snowflakekeypairauthentication",
+             "alias": "snowflakeAccount"
+          },
+          {
+             "name": "snowflakeDatabase",
+             "displayName": "snowflakeDatabase",
+             "type": "text",
+             "value": "ATM_DB",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeDatabase"
+          },
+          {
+             "name": "snowflakeSchema",
+             "displayName": "snowflakeSchema",
+             "type": "text",
+             "value": "SALES",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeSchema"
+          },
+          {
+             "name": "semanticView",
+             "displayName": "semanticView",
+             "type": "text",
+             "value": "TPCH_ANALYSIS",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "semanticView"
+          }
+       ],
+       "output": {
+          "name": "result",
+          "displayName": "result",
+          "type": "object",
+          "value": null,
+          "nullable": true,
+          "isList": false,
+          "children": [],
+          "entitySubType": null,
+          "alias": "result"
+       },
+       "version": "1.0.0",
+       "functionName": "getCatalog"
+    },
+    {
+       "name": "SF Semantic View BI",
+       "alias": "explore",
+       "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
+       "parameters": [
+          {
+             "name": "snowflakeAccount",
+             "displayName": "snowflakeAccount",
+             "type": "ACCOUNT",
+             "value": {
+                "id": "627",
+                "type": "ACCOUNT",
+                "subType": "snowflakekeypairauthentication"
+             },
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": "snowflakekeypairauthentication",
+             "alias": "snowflakeAccount"
+          },
+          {
+             "name": "snowflakeDatabase",
+             "displayName": "snowflakeDatabase",
+             "type": "text",
+             "value": "ATM_DB",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeDatabase"
+          },
+          {
+             "name": "snowflakeSchema",
+             "displayName": "snowflakeSchema",
+             "type": "text",
+             "value": "SALES",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeSchema"
+          },
+          {
+             "name": "snowflakeAgent",
+             "displayName": "snowflakeAgent",
+             "type": "text",
+             "value": "TPCH_AGENT_EXAMPLE",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeAgent"
+          },
+          {
+             "name": "requestBody",
+             "displayName": "requestBody",
+             "type": "object",
+             "value": null,
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "requestBody"
+          }
+       ],
+       "output": {
+          "name": "result",
+          "displayName": "result",
+          "type": "object",
+          "value": null,
+          "nullable": true,
+          "isList": false,
+          "children": [],
+          "entitySubType": null,
+          "alias": "result"
+       },
+       "version": "1.0.0",
+       "functionName": "explore"
+    },
+    {
+       "name": "SF Semantic View BI",
+       "alias": "executeQuery",
+       "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
+       "parameters": [
+          {
+             "name": "snowflakeAccount",
+             "displayName": "snowflakeAccount",
+             "type": "ACCOUNT",
+             "value": {
+                "id": "627",
+                "type": "ACCOUNT",
+                "subType": "snowflakekeypairauthentication"
+             },
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": "snowflakekeypairauthentication",
+             "alias": "snowflakeAccount"
+          },
+          {
+             "name": "snowflakeDatabase",
+             "displayName": "snowflakeDatabase",
+             "type": "text",
+             "value": "ATM_DB",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeDatabase"
+          },
+          {
+             "name": "snowflakeSchema",
+             "displayName": "snowflakeSchema",
+             "type": "text",
+             "value": "SALES",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeSchema"
+          },
+          {
+             "name": "snowflakeWH",
+             "displayName": "snowflakeWH",
+             "type": "text",
+             "value": "EMEA_GENERAL_PURPOSE",
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "snowflakeWH"
+          },
+          {
+             "name": "sql",
+             "displayName": "sql",
+             "type": "text",
+             "value": null,
+             "nullable": false,
+             "isList": false,
+             "children": [],
+             "entitySubType": null,
+             "alias": "sql"
+          }
+       ],
+       "output": {
+          "name": "result",
+          "displayName": "result",
+          "type": "object",
+          "value": null,
+          "nullable": true,
+          "isList": false,
+          "children": [],
+          "entitySubType": null,
+          "alias": "result"
+       },
+       "version": "1.0.1",
+       "functionName": "executeQuery"
+    }
+ ]
 }

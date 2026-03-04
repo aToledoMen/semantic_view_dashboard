@@ -8,4 +8,5 @@ export const SNOWFLAKE_CONFIG = {
   schema: 'SALES',
   semanticView: 'TPCH_ANALYSIS',
   agent: 'TPCH_AGENT_EXAMPLE',
+  warehouse: 'EMEA_GENERAL_PURPOSE', // TODO: update with your actual warehouse name
 }

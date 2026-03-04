@@ -1,5 +1,12 @@
 export type VegaLiteSpec = Record<string, unknown>
 
+export type MetricOperator = '>' | '>=' | '=' | '<=' | '<'
+
+export interface MetricFilter {
+  op: MetricOperator
+  val: string
+}
+
 export interface ExploreResult {
   text: string
   chart: VegaLiteSpec

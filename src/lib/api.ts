@@ -1,6 +1,7 @@
 import Domo from 'ryuu.js'
 import type { CatalogResponse } from '@/types/catalog'
 import type { ExploreResult } from '@/types/explore'
+import type { QueryResult } from '@/types/dashboard'
 import { SNOWFLAKE_CONFIG } from '@/config'
 
 const CE_BASE = '/domo/codeengine/v2/packages'
@@ -29,17 +30,29 @@ export async function exploreData(
   metrics: string[],
   dimensions: string[],
   timeGrain?: string | null,
-  filters?: Record<string, string[]>
+  dimensionFilters?: Record<string, string[]>,
+  metricFilters?: Record<string, { op: string; val: string }>
 ): Promise<ExploreResult> {
   const url = `${CE_BASE}/explore`
   const requestBody: Record<string, unknown> = { metrics, dimensions }
   if (timeGrain) requestBody.time_grain = timeGrain
-  if (filters && Object.keys(filters).length > 0) {
-    requestBody.filters = Object.entries(filters).map(([dim, values]) => ({
-      dim,
-      op: 'IN',
-      val: values,
-    }))
+
+  const allFilters: { dim: string; op: string; val: string | string[] }[] = []
+
+  if (dimensionFilters && Object.keys(dimensionFilters).length > 0) {
+    for (const [dim, values] of Object.entries(dimensionFilters)) {
+      allFilters.push({ dim, op: 'IN', val: values })
+    }
+  }
+
+  if (metricFilters && Object.keys(metricFilters).length > 0) {
+    for (const [dim, filter] of Object.entries(metricFilters)) {
+      allFilters.push({ dim, op: filter.op, val: filter.val })
+    }
+  }
+
+  if (allFilters.length > 0) {
+    requestBody.filters = allFilters
   }
 
   const body = {
@@ -57,6 +70,27 @@ export async function exploreData(
     return response.result
   } catch (error) {
     console.error('[API] explore ✗ error:', error)
+    throw error
+  }
+}
+
+export async function executeQuery(sql: string): Promise<QueryResult> {
+  const url = `${CE_BASE}/executeQuery`
+  const body = {
+    snowflakeAccount: SNOWFLAKE_CONFIG.account,
+    snowflakeDatabase: SNOWFLAKE_CONFIG.database,
+    snowflakeSchema: SNOWFLAKE_CONFIG.schema,
+    snowflakeWH: SNOWFLAKE_CONFIG.warehouse,
+    sql,
+  }
+  console.log('[API] executeQuery → POST', url, body)
+
+  try {
+    const response = await Domo.post<{ result: QueryResult }>(url, body)
+    console.log('[API] executeQuery ← response:', response)
+    return response.result
+  } catch (error) {
+    console.error('[API] executeQuery ✗ error:', error)
     throw error
   }
 }

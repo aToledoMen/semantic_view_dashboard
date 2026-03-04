@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SidebarSection } from './SidebarSection'
 import { DimensionFilterSection } from './DimensionFilterSection'
+import { MetricFilterSection } from './MetricFilterSection'
 import type { CatalogResponse } from '@/types/catalog'
+import type { MetricFilter } from '@/types/explore'
 
 interface SidebarProps {
   catalog: CatalogResponse | null
@@ -22,6 +24,9 @@ interface SidebarProps {
   onToggleDimensionFilter: (dimensionName: string, value: string) => void
   onClearDimensionFilter: (dimensionName: string) => void
   onClearAllFilters: () => void
+  metricFilters: Map<string, MetricFilter>
+  onSetMetricFilter: (metricName: string, filter: MetricFilter | null) => void
+  onClearAllMetricFilters: () => void
   canExplore: boolean
   exploring: boolean
   onExplore: () => void
@@ -60,6 +65,9 @@ export function Sidebar({
   onToggleDimensionFilter,
   onClearDimensionFilter,
   onClearAllFilters,
+  metricFilters,
+  onSetMetricFilter,
+  onClearAllMetricFilters,
   canExplore,
   exploring,
   onExplore,
@@ -239,6 +247,18 @@ export function Sidebar({
             onToggleFilter={onToggleDimensionFilter}
             onClearDimensionFilter={onClearDimensionFilter}
             onClearAllFilters={onClearAllFilters}
+          />
+        )}
+
+        {/* Metric Filters — always available when metrics selected */}
+        {!loading && selectedMetrics.size > 0 && (
+          <MetricFilterSection
+            selectedMetricsCatalog={
+              catalog?.metrics.filter((m) => selectedMetrics.has(m.name)) ?? []
+            }
+            metricFilters={metricFilters}
+            onSetMetricFilter={onSetMetricFilter}
+            onClearAllMetricFilters={onClearAllMetricFilters}
           />
         )}
 

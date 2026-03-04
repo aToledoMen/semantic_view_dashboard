@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
-import { HeaderBar } from '@/components/HeaderBar'
+import { useState, useEffect, useCallback } from 'react'
+import { HeaderBar, type AppTab } from '@/components/HeaderBar'
 import { Sidebar } from '@/components/Sidebar'
 import { MainContent } from '@/components/MainContent'
+import { DashboardView } from '@/components/DashboardView'
 import { fetchCatalog, exploreData } from '@/lib/api'
 import type { CatalogResponse } from '@/types/catalog'
-import type { ExploreState } from '@/types/explore'
+import type { ExploreState, MetricFilter } from '@/types/explore'
 
 function App() {
+  const [activeTab, setActiveTab] = useState<AppTab>('dashboard')
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,12 +18,25 @@ function App() {
   const [selectedTimeGrain, setSelectedTimeGrain] = useState<string | null>(null)
   const [dimensionFilters, setDimensionFilters] = useState<Map<string, Set<string>>>(new Map())
   const [knownDimensionValues, setKnownDimensionValues] = useState<Map<string, string[]>>(new Map())
+  const [metricFilters, setMetricFilters] = useState<Map<string, MetricFilter>>(new Map())
 
   const [exploreState, setExploreState] = useState<ExploreState>({
     status: 'idle',
     result: null,
     error: null,
   })
+
+  const handleDashboardDimensionValues = useCallback((values: Map<string, string[]>) => {
+    setKnownDimensionValues((prev) => {
+      const next = new Map(prev)
+      values.forEach((vals, key) => {
+        const existing = new Set(prev.get(key) ?? [])
+        for (const v of vals) existing.add(v)
+        next.set(key, Array.from(existing).sort())
+      })
+      return next
+    })
+  }, [])
 
   const canExplore = selectedMetrics.size >= 1 && selectedDimensions.size >= 1
 
@@ -48,9 +63,14 @@ function App() {
 
     setExploreState({ status: 'loading', result: null, error: null })
 
-    const filters: Record<string, string[]> = {}
+    const dimFilters: Record<string, string[]> = {}
     dimensionFilters.forEach((values, dimName) => {
-      if (values.size > 0) filters[dimName] = Array.from(values)
+      if (values.size > 0) dimFilters[dimName] = Array.from(values)
+    })
+
+    const mFilters: Record<string, { op: string; val: string }> = {}
+    metricFilters.forEach((filter, metricName) => {
+      mFilters[metricName] = filter
     })
 
     try {
@@ -58,7 +78,8 @@ function App() {
         Array.from(selectedMetrics),
         Array.from(selectedDimensions),
         selectedTimeGrain,
-        Object.keys(filters).length > 0 ? filters : undefined
+        Object.keys(dimFilters).length > 0 ? dimFilters : undefined,
+        Object.keys(mFilters).length > 0 ? mFilters : undefined
       )
       setExploreState({ status: 'success', result, error: null })
       extractDimensionValues(result)
@@ -130,6 +151,22 @@ function App() {
     setDimensionFilters(new Map())
   }
 
+  function setMetricFilter(metricName: string, filter: MetricFilter | null) {
+    setMetricFilters((prev) => {
+      const next = new Map(prev)
+      if (filter) {
+        next.set(metricName, filter)
+      } else {
+        next.delete(metricName)
+      }
+      return next
+    })
+  }
+
+  function clearAllMetricFilters() {
+    setMetricFilters(new Map())
+  }
+
   function extractDimensionValues(result: ExploreState['result']) {
     if (!result?.chart || !catalog) return
     const dataValues = (result.chart.data as any)?.values as Record<string, unknown>[] | undefined
@@ -169,7 +206,7 @@ function App() {
   if (error) {
     return (
       <div className="h-screen flex flex-col">
-        <HeaderBar semanticView={null} loading={false} />
+        <HeaderBar semanticView={null} loading={false} activeTab={activeTab} onTabChange={setActiveTab} />
         <div className="flex-1 flex items-center justify-center bg-background">
           <div className="text-center max-w-sm px-6">
             <div className="mx-auto mb-4 w-14 h-14 rounded-xl bg-destructive/10 flex items-center justify-center">
@@ -196,32 +233,46 @@ function App() {
       <HeaderBar
         semanticView={catalog?.semantic_view ?? null}
         loading={loading}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          catalog={catalog}
-          loading={loading}
-          selectedMetrics={selectedMetrics}
-          selectedDimensions={selectedDimensions}
-          selectedTimeGrain={selectedTimeGrain}
-          onToggleMetric={(name) => toggleInSet(setSelectedMetrics, name)}
-          onToggleDimension={handleToggleDimension}
-          onSelectTimeGrain={setSelectedTimeGrain}
-          dimensionFilters={dimensionFilters}
-          knownDimensionValues={knownDimensionValues}
-          onToggleDimensionFilter={toggleDimensionFilter}
-          onClearDimensionFilter={clearDimensionFilter}
-          onClearAllFilters={clearAllFilters}
-          canExplore={canExplore}
-          exploring={exploreState.status === 'loading'}
-          onExplore={handleExplore}
-        />
-        <MainContent
-          selectedCount={totalSelected}
-          exploreState={exploreState}
-          canExplore={canExplore}
-        />
-      </div>
+      {activeTab === 'explorer' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            catalog={catalog}
+            loading={loading}
+            selectedMetrics={selectedMetrics}
+            selectedDimensions={selectedDimensions}
+            selectedTimeGrain={selectedTimeGrain}
+            onToggleMetric={(name) => {
+              if (selectedMetrics.has(name)) {
+                setMetricFilters((prev) => { const next = new Map(prev); next.delete(name); return next })
+              }
+              toggleInSet(setSelectedMetrics, name)
+            }}
+            onToggleDimension={handleToggleDimension}
+            onSelectTimeGrain={setSelectedTimeGrain}
+            dimensionFilters={dimensionFilters}
+            knownDimensionValues={knownDimensionValues}
+            onToggleDimensionFilter={toggleDimensionFilter}
+            onClearDimensionFilter={clearDimensionFilter}
+            onClearAllFilters={clearAllFilters}
+            metricFilters={metricFilters}
+            onSetMetricFilter={setMetricFilter}
+            onClearAllMetricFilters={clearAllMetricFilters}
+            canExplore={canExplore}
+            exploring={exploreState.status === 'loading'}
+            onExplore={handleExplore}
+          />
+          <MainContent
+            selectedCount={totalSelected}
+            exploreState={exploreState}
+            canExplore={canExplore}
+          />
+        </div>
+      ) : (
+        catalog && <DashboardView catalog={catalog} onDimensionValues={handleDashboardDimensionValues} />
+      )}
     </div>
   )
 }
