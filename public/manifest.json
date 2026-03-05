@@ -235,6 +235,150 @@
        },
        "version": "1.0.1",
        "functionName": "executeQuery"
-    }
+    },
+    {
+      "name": "SF Semantic View BI",
+      "alias": "executeBatchSqlApi",
+      "packageId": "57adfda4-cf72-4100-82db-8a0803904786",
+      "version": "1.0.3",
+      "functionName": "executeBatchSqlApi",
+      "parameters": [
+         {
+            "name": "snowflakeAccount",
+            "displayName": "snowflakeAccount",
+            "type": "ACCOUNT",
+            "value": {
+               "id": "627",
+               "type": "ACCOUNT",
+               "subType": "snowflakekeypairauthentication"
+            },
+            "nullable": false,
+            "isList": false,
+            "children": [],
+            "entitySubType": "snowflakekeypairauthentication",
+            "alias": "snowflakeAccount"
+         },
+         {
+            "name": "snowflakeDatabase",
+            "displayName": "snowflakeDatabase",
+            "type": "text",
+            "value": "ATM_DB",
+            "nullable": false,
+            "isList": false,
+            "children": [],
+            "entitySubType": null,
+            "alias": "snowflakeDatabase"
+         },
+         {
+            "name": "snowflakeSchema",
+            "displayName": "snowflakeSchema",
+            "type": "text",
+            "value": "SALES",
+            "nullable": false,
+            "isList": false,
+            "children": [],
+            "entitySubType": null,
+            "alias": "snowflakeSchema"
+         },
+         {
+            "name": "snowflakeWH",
+            "displayName": "snowflakeWH",
+            "type": "text",
+            "value": "EMEA_GENERAL_PURPOSE",
+            "nullable": false,
+            "isList": false,
+            "children": [],
+            "entitySubType": null,
+            "alias": "snowflakeWH"
+         },
+         {
+            "name": "queries",
+            "displayName": "queries",
+            "type": "object",
+            "value": [
+               {
+                  "id": "kpi-orders",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS METRICS ORDERS.ORDER_COUNT )"
+               },
+               {
+                  "id": "kpi-customers",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS METRICS CUSTOMER.CUSTOMER_COUNT )"
+               },
+               {
+                  "id": "kpi-avg-value",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS METRICS ORDERS.ORDER_AVERAGE_VALUE )"
+               },
+               {
+                  "id": "kpi-orders-per-customer",
+                  "sql": "SELECT ROUND(ORDER_COUNT / NULLIF(CUSTOMER_COUNT, 0), 2) AS value FROM (SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS METRICS ORDERS.ORDER_COUNT, CUSTOMER.CUSTOMER_COUNT ))"
+               },
+               {
+                  "id": "kpi-top-region",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS REGION.CUSTOMER_REGION_NAME METRICS ORDERS.ORDER_COUNT ) ORDER BY ORDER_COUNT DESC LIMIT 1"
+               },
+               {
+                  "id": "kpi-top-segment",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS CUSTOMER.CUSTOMER_MARKET_SEGMENT METRICS CUSTOMER.CUSTOMER_COUNT ) ORDER BY CUSTOMER_COUNT DESC LIMIT 1"
+               },
+               {
+                  "id": "chart-orders-over-time",
+                  "sql": "SELECT DATE_TRUNC('YEAR', ORDER_DATE) AS YEAR, CUSTOMER_REGION_NAME, SUM(ORDER_COUNT) AS ORDER_COUNT FROM (SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS ORDERS.ORDER_DATE, REGION.CUSTOMER_REGION_NAME METRICS ORDERS.ORDER_COUNT )) GROUP BY YEAR, CUSTOMER_REGION_NAME ORDER BY YEAR"
+               },
+               {
+                  "id": "chart-orders-by-region",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS REGION.CUSTOMER_REGION_NAME METRICS ORDERS.ORDER_COUNT ) ORDER BY ORDER_COUNT DESC"
+               },
+               {
+                  "id": "chart-customers-by-segment",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS CUSTOMER.CUSTOMER_MARKET_SEGMENT METRICS CUSTOMER.CUSTOMER_COUNT ) ORDER BY CUSTOMER_COUNT DESC"
+               },
+               {
+                  "id": "chart-top-nations",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS NATION.CUSTOMER_NATION_NAME METRICS ORDERS.ORDER_COUNT ) ORDER BY ORDER_COUNT DESC LIMIT 10"
+               },
+               {
+                  "id": "chart-avg-value-trend",
+                  "sql": "SELECT DATE_TRUNC('YEAR', ORDER_DATE) AS YEAR, SUM(ORDER_AVERAGE_VALUE) AS ORDER_AVERAGE_VALUE FROM (SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS ORDERS.ORDER_DATE METRICS ORDERS.ORDER_AVERAGE_VALUE )) GROUP BY YEAR ORDER BY YEAR"
+               },
+               {
+                  "id": "chart-customers-by-region",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS REGION.CUSTOMER_REGION_NAME METRICS CUSTOMER.CUSTOMER_COUNT ) ORDER BY CUSTOMER_COUNT DESC"
+               },
+               {
+                  "id": "chart-orders-area",
+                  "sql": "SELECT DATE_TRUNC('YEAR', ORDER_DATE) AS YEAR, SUM(ORDER_COUNT) AS ORDER_COUNT FROM (SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS ORDERS.ORDER_DATE METRICS ORDERS.ORDER_COUNT )) GROUP BY YEAR ORDER BY YEAR"
+               },
+               {
+                  "id": "chart-region-composed",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS REGION.CUSTOMER_REGION_NAME METRICS ORDERS.ORDER_COUNT, ORDERS.ORDER_AVERAGE_VALUE ) ORDER BY ORDER_COUNT DESC"
+               },
+               {
+                  "id": "chart-customers-treemap",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS NATION.CUSTOMER_NATION_NAME METRICS CUSTOMER.CUSTOMER_COUNT ) ORDER BY CUSTOMER_COUNT DESC LIMIT 15"
+               },
+               {
+                  "id": "table-top-customers",
+                  "sql": "SELECT * FROM SEMANTIC_VIEW( ATM_DB.SALES.TPCH_ANALYSIS DIMENSIONS CUSTOMER.CUSTOMER_NAME, NATION.CUSTOMER_NATION_NAME, CUSTOMER.CUSTOMER_MARKET_SEGMENT METRICS ORDERS.ORDER_COUNT, ORDERS.ORDER_AVERAGE_VALUE ) ORDER BY ORDER_COUNT DESC LIMIT 20"
+               }
+            ],
+            "nullable": false,
+            "isList": true,
+            "children": [],
+            "entitySubType": null,
+            "alias": "queries"
+         }
+      ],
+      "output": {
+         "name": "result",
+         "displayName": "result",
+         "type": "object",
+         "value": null,
+         "nullable": true,
+         "isList": false,
+         "children": [],
+         "entitySubType": null,
+         "alias": "result"
+      }
+   }
  ]
 }

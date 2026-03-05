@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { RefreshCw, TrendingUp, Users, DollarSign, BarChart3, Globe, Tag, AlertCircle, Filter, ChevronDown, X } from 'lucide-react'
+import { RefreshCw, TrendingUp, Users, DollarSign, BarChart3, Globe, Tag, AlertCircle, Filter, ChevronDown, ChevronRight, X, Layers } from 'lucide-react'
 import {
   LineChart, Line,
   BarChart, Bar,
@@ -13,11 +13,11 @@ import {
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { executeQuery } from '@/lib/api'
-import { buildWidgets, type DashboardFilters } from '@/lib/dashboardWidgets'
+import { executeBatch } from '@/lib/api'
+import { buildWidgets, buildDrillQuery, DRILLABLE_WIDGETS, buildDimDrillQuery, DIM_DRILLABLE_WIDGETS, getDimDrillConfig, type DashboardFilters } from '@/lib/dashboardWidgets'
 import { SNOWFLAKE_CONFIG } from '@/config'
 import type { CatalogResponse } from '@/types/catalog'
-import type { DashboardWidget, WidgetState, QueryResult } from '@/types/dashboard'
+import type { DashboardWidget, WidgetState, QueryResult, TimeGrain, DrillState, DimDrillState } from '@/types/dashboard'
 
 interface DashboardViewProps {
   catalog: CatalogResponse | null
@@ -65,11 +65,28 @@ function normaliseDate(v: unknown): string {
   return String(v)
 }
 
-function formatAxisDate(value: string): string {
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatDateByGrain(value: string, grain: TimeGrain): string {
   if (!value) return ''
   const d = new Date(value)
   if (isNaN(d.getTime())) return String(value)
-  return String(d.getFullYear())
+  switch (grain) {
+    case 'YEAR': return String(d.getFullYear())
+    case 'MONTH': return MONTH_NAMES[d.getMonth()]
+    case 'DAY': return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`
+  }
+}
+
+function formatTooltipByGrain(value: string, grain: TimeGrain): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return String(value)
+  switch (grain) {
+    case 'YEAR': return String(d.getFullYear())
+    case 'MONTH': return d.toLocaleDateString('en', { month: 'long', year: 'numeric' })
+    case 'DAY': return d.toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
 }
 
 function fmtNum(value: number): string {
@@ -99,6 +116,12 @@ function fmtField(value: number, field: string): string {
   return isCurrencyField(field) ? `€${fmtNum(value)}` : fmtNum(value)
 }
 
+function drillCacheKey(drill?: DrillState | null): string {
+  if (!drill || drill.grain === 'YEAR') return 'YEAR'
+  if (drill.grain === 'MONTH') return `MONTH:${drill.year}`
+  return `DAY:${drill.year}:${drill.month}`
+}
+
 const TOOLTIP_STYLE = {
   backgroundColor: 'hsl(var(--card))',
   border: '1px solid hsl(var(--border))',
@@ -122,51 +145,50 @@ function prepareLineData(data: QueryResult) {
 
 /* ── Chart components ── */
 
-function RechartLine({ data }: { data: QueryResult }) {
+function RechartLine({ data, onDrillDown, grain = 'YEAR' }: { data: QueryResult; onDrillDown?: (dateValue: string) => void; grain?: TimeGrain }) {
   const { rows, xField, yField } = useMemo(() => prepareLineData(data), [data])
   const currency = isCurrencyField(yField)
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
-        <XAxis
-          dataKey={xField}
-          tickFormatter={formatAxisDate}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-        />
-        <YAxis
-          tickFormatter={(v) => currency ? `€${fmtNum(v)}` : fmtNum(v)}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-          axisLine={false}
-          width={currency ? 60 : 50}
-        />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          formatter={(value: number | undefined) => [fmtField(value ?? 0, yField), yField.replace(/_/g, ' ')]}
-          labelFormatter={(label) => {
-            const d = new Date(label)
-            return isNaN(d.getTime()) ? label : String(d.getFullYear())
-          }}
-        />
-        <Line
-          type="monotone"
-          dataKey={yField}
-          stroke={PALETTE[0]}
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4, fill: PALETTE[0], strokeWidth: 0 }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div style={{ cursor: onDrillDown ? 'pointer' : undefined }}>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 8 }} onClick={(e: any) => { if (onDrillDown && e?.activeLabel) onDrillDown(String(e.activeLabel)) }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
+          <XAxis
+            dataKey={xField}
+            tickFormatter={(v) => formatDateByGrain(v, grain)}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+          />
+          <YAxis
+            tickFormatter={(v) => currency ? `€${fmtNum(v)}` : fmtNum(v)}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+            axisLine={false}
+            width={currency ? 60 : 50}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value: number | undefined) => [fmtField(value ?? 0, yField), yField.replace(/_/g, ' ')]}
+            labelFormatter={(label) => formatTooltipByGrain(String(label), grain)}
+          />
+          <Line
+            type="monotone"
+            dataKey={yField}
+            stroke={PALETTE[0]}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: PALETTE[0], strokeWidth: 0 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
-function RechartMultiLine({ data }: { data: QueryResult }) {
+function RechartMultiLine({ data, onDrillDown, grain = 'YEAR' }: { data: QueryResult; onDrillDown?: (dateValue: string) => void; grain?: TimeGrain }) {
   const xField = data.columns[0]
   const dimField = data.columns[1]
   const metricField = data.columns[2]
@@ -193,8 +215,6 @@ function RechartMultiLine({ data }: { data: QueryResult }) {
     }
   }, [data.rows, xField, dimField, metricField])
 
-  const yDomain = [40000, 50000] as const
-
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [hovered, setHovered] = useState<string | null>(null)
 
@@ -217,163 +237,168 @@ function RechartMultiLine({ data }: { data: QueryResult }) {
   }, [])
 
   return (
-    <ResponsiveContainer width="100%" height={pivoted.length > 4 ? 280 : 240}>
-      <LineChart data={pivoted} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
-        <XAxis
-          dataKey={xField}
-          tickFormatter={formatAxisDate}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-        />
-        <YAxis
-          tickFormatter={fmtNum}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-          axisLine={false}
-          width={55}
-          domain={[yDomain[0], yDomain[1]]}
-        />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          labelFormatter={(label) => {
-            const d = new Date(label)
-            return isNaN(d.getTime()) ? label : String(d.getFullYear())
-          }}
-          formatter={(value: number | undefined, name?: string) => [
-            fmtNum(value ?? 0),
-            (name ?? '').replace(/_/g, ' '),
-          ]}
-        />
-        <Legend
-          verticalAlign="top"
-          iconType="circle"
-          iconSize={8}
-          wrapperStyle={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', cursor: 'pointer' }}
-          onClick={handleLegendClick}
-          onMouseEnter={handleLegendEnter}
-          onMouseLeave={handleLegendLeave}
-          formatter={(value: string) => (
-            <span style={{ textDecoration: hidden.has(value) ? 'line-through' : 'none', opacity: hidden.has(value) ? 0.4 : 1 }}>
-              {value}
-            </span>
-          )}
-        />
-        {seriesKeys.map((key, i) => (
-          <Line
-            key={key}
-            type="monotone"
-            dataKey={key}
-            stroke={PALETTE[i % PALETTE.length]}
-            strokeWidth={2}
-            dot={{ r: 3, fill: PALETTE[i % PALETTE.length], strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: PALETTE[i % PALETTE.length], strokeWidth: 0 }}
-            hide={hidden.has(key)}
-            strokeOpacity={hovered && hovered !== key ? 0.15 : 1}
-          />
-        ))}
-        {pivoted.length > 4 && (
-          <Brush
+    <div style={{ cursor: onDrillDown ? 'pointer' : undefined }}>
+      <ResponsiveContainer width="100%" height={pivoted.length > 4 ? 280 : 240}>
+        <LineChart data={pivoted} margin={{ top: 8, right: 16, bottom: 4, left: 8 }} onClick={(e: any) => { if (onDrillDown && e?.activeLabel) onDrillDown(String(e.activeLabel)) }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
+          <XAxis
             dataKey={xField}
-            height={20}
+            tickFormatter={(v) => formatDateByGrain(v, grain)}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
             stroke="hsl(var(--border))"
-            tickFormatter={formatAxisDate}
-            fill="hsl(var(--muted))"
+            tickLine={false}
           />
-        )}
-      </LineChart>
-    </ResponsiveContainer>
+          <YAxis
+            tickFormatter={fmtNum}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+            axisLine={false}
+            width={55}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            labelFormatter={(label) => formatTooltipByGrain(String(label), grain)}
+            formatter={(value: number | undefined, name?: string) => [
+              fmtNum(value ?? 0),
+              (name ?? '').replace(/_/g, ' '),
+            ]}
+          />
+          <Legend
+            verticalAlign="top"
+            iconType="circle"
+            iconSize={8}
+            wrapperStyle={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', cursor: 'pointer' }}
+            onClick={handleLegendClick}
+            onMouseEnter={handleLegendEnter}
+            onMouseLeave={handleLegendLeave}
+            formatter={(value: string) => (
+              <span style={{ textDecoration: hidden.has(value) ? 'line-through' : 'none', opacity: hidden.has(value) ? 0.4 : 1 }}>
+                {value}
+              </span>
+            )}
+          />
+          {seriesKeys.map((key, i) => (
+            <Line
+              key={key}
+              type="monotone"
+              dataKey={key}
+              stroke={PALETTE[i % PALETTE.length]}
+              strokeWidth={2}
+              dot={{ r: 3, fill: PALETTE[i % PALETTE.length], strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: PALETTE[i % PALETTE.length], strokeWidth: 0 }}
+              hide={hidden.has(key)}
+              strokeOpacity={hovered && hovered !== key ? 0.15 : 1}
+            />
+          ))}
+          {pivoted.length > 4 && (
+            <Brush
+              dataKey={xField}
+              height={20}
+              stroke="hsl(var(--border))"
+              tickFormatter={(v) => formatDateByGrain(v, grain)}
+              fill="hsl(var(--muted))"
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
-function RechartArea({ data }: { data: QueryResult }) {
+function RechartArea({ data, onDrillDown, grain = 'YEAR' }: { data: QueryResult; onDrillDown?: (dateValue: string) => void; grain?: TimeGrain }) {
   const { rows, xField, yField } = useMemo(() => prepareLineData(data), [data])
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
-        <defs>
-          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={PALETTE[1]} stopOpacity={0.3} />
-            <stop offset="95%" stopColor={PALETTE[1]} stopOpacity={0.05} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
-        <XAxis
-          dataKey={xField}
-          tickFormatter={formatAxisDate}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-        />
-        <YAxis
-          tickFormatter={fmtNum}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-          axisLine={false}
-          width={50}
-        />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          formatter={(value: number | undefined) => [fmtNum(value ?? 0), yField.replace(/_/g, ' ')]}
-          labelFormatter={(label) => {
-            const d = new Date(label)
-            return isNaN(d.getTime()) ? label : String(d.getFullYear())
-          }}
-        />
-        <Area
-          type="monotone"
-          dataKey={yField}
-          stroke={PALETTE[1]}
-          strokeWidth={2}
-          fill="url(#areaGrad)"
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div style={{ cursor: onDrillDown ? 'pointer' : undefined }}>
+      <ResponsiveContainer width="100%" height={220}>
+        <AreaChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 8 }} onClick={(e: any) => { if (onDrillDown && e?.activeLabel) onDrillDown(String(e.activeLabel)) }}>
+          <defs>
+            <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={PALETTE[1]} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={PALETTE[1]} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
+          <XAxis
+            dataKey={xField}
+            tickFormatter={(v) => formatDateByGrain(v, grain)}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+          />
+          <YAxis
+            tickFormatter={fmtNum}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+            axisLine={false}
+            width={50}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value: number | undefined) => [fmtNum(value ?? 0), yField.replace(/_/g, ' ')]}
+            labelFormatter={(label) => formatTooltipByGrain(String(label), grain)}
+          />
+          <Area
+            type="monotone"
+            dataKey={yField}
+            stroke={PALETTE[1]}
+            strokeWidth={2}
+            fill="url(#areaGrad)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
-function RechartBar({ data }: { data: QueryResult }) {
+function RechartBar({ data, onDrillDown }: { data: QueryResult; onDrillDown?: (categoryValue: string) => void }) {
   const catField = data.columns[0]
   const valField = data.columns[1]
   const rows = useMemo(() => coerceNumeric(data.rows, valField), [data.rows, valField])
   const barHeight = Math.max(220, rows.length * 36)
 
+  const handleClick = useCallback((_: any, index: number) => {
+    if (!onDrillDown) return
+    const value = rows[index]?.[catField]
+    if (value != null) onDrillDown(String(value))
+  }, [onDrillDown, rows, catField])
+
   return (
-    <ResponsiveContainer width="100%" height={barHeight}>
-      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} horizontal={false} />
-        <YAxis
-          dataKey={catField}
-          type="category"
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-          axisLine={false}
-          width={120}
-        />
-        <XAxis
-          type="number"
-          tickFormatter={fmtNum}
-          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-          stroke="hsl(var(--border))"
-          tickLine={false}
-          axisLine={false}
-        />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          formatter={(value: number | undefined) => [fmtNum(value ?? 0), valField.replace(/_/g, ' ')]}
-        />
-        <Bar dataKey={valField} radius={[0, 3, 3, 0]} fill={PALETTE[0]} label={{ position: 'right', fontSize: 10, fill: 'hsl(var(--muted-foreground))', formatter: (v: unknown) => fmtNum(Number(v) || 0) }}>
-          {rows.map((_, i) => (
-            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div style={{ cursor: onDrillDown ? 'pointer' : undefined }}>
+      <ResponsiveContainer width="100%" height={barHeight}>
+        <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} horizontal={false} />
+          <YAxis
+            dataKey={catField}
+            type="category"
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+            axisLine={false}
+            width={120}
+          />
+          <XAxis
+            type="number"
+            tickFormatter={fmtNum}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            stroke="hsl(var(--border))"
+            tickLine={false}
+            axisLine={false}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value: number | undefined) => [fmtNum(value ?? 0), valField.replace(/_/g, ' ')]}
+          />
+          <Bar dataKey={valField} radius={[0, 3, 3, 0]} fill={PALETTE[0]} onClick={handleClick} label={{ position: 'right', fontSize: 10, fill: 'hsl(var(--muted-foreground))', formatter: (v: unknown) => fmtNum(Number(v) || 0) }}>
+            {rows.map((_, i) => (
+              <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -489,10 +514,7 @@ function RechartDonut({ data }: { data: QueryResult }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [hovered, setHovered] = useState<string | null>(null)
 
-  const visibleRows = useMemo(
-    () => rows.map((r) => hidden.has(String(r[catField])) ? { ...r, [valField]: 0 } : r),
-    [rows, catField, valField, hidden]
-  )
+  const visibleRows = rows
 
   const handleLegendClick = useCallback((entry: any) => {
     const key = String(entry.value)
@@ -525,11 +547,13 @@ function RechartDonut({ data }: { data: QueryResult }) {
         >
           {visibleRows.map((r: Record<string, unknown>, i: number) => {
             const name = String(r[catField])
+            const isHidden = hidden.has(name)
+            const isDimmed = hovered && hovered !== name
             return (
               <Cell
                 key={i}
-                fill={hidden.has(name) ? 'transparent' : PALETTE[i % PALETTE.length]}
-                fillOpacity={hovered && hovered !== name ? 0.2 : 1}
+                fill={PALETTE[i % PALETTE.length]}
+                fillOpacity={isHidden ? 0.08 : isDimmed ? 0.2 : 1}
               />
             )
           })}
@@ -909,23 +933,89 @@ function ChartCard({
   widget,
   state,
   onRetry,
+  drillState,
+  onDrillDown,
+  onDrillUp,
+  dimDrillState,
+  dimDrillConfig,
+  onDimDrillDown,
+  onDimDrillUp,
 }: {
   widget: DashboardWidget
   state: WidgetState
   onRetry: () => void
+  drillState?: DrillState
+  onDrillDown?: (dateValue: string) => void
+  onDrillUp?: (targetGrain?: TimeGrain) => void
+  dimDrillState?: DimDrillState
+  dimDrillConfig?: { parentLabel: string; childLabel: string } | null
+  onDimDrillDown?: (categoryValue: string) => void
+  onDimDrillUp?: () => void
 }) {
+  const grain: TimeGrain = drillState?.grain ?? 'YEAR'
+  const canDrill = onDrillDown && grain !== 'DAY'
+  const canDimDrill = onDimDrillDown && !dimDrillState
+  const isDrillable = !!(onDrillDown || onDimDrillDown)
+
   return (
     <div className={cn(
-      'bg-card rounded-lg border border-border p-5',
+      'bg-card rounded-lg border p-5',
+      isDrillable ? 'border-primary/25' : 'border-border',
       widget.colSpan === 2 && 'col-span-2',
       widget.colSpan === 4 && 'col-span-full',
     )}>
-      <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wide">
-        {widget.title}
-      </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+          {widget.title}
+          {isDrillable && (
+            <Layers className="h-3 w-3 text-primary/50" />
+          )}
+        </h3>
+        {/* Temporal drill breadcrumb */}
+        {drillState && drillState.grain !== 'YEAR' && onDrillUp && (
+          <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+            <button onClick={() => onDrillUp('YEAR')} className="hover:text-primary transition-colors">
+              All Years
+            </button>
+            {drillState.year != null && (
+              <>
+                <ChevronRight className="h-3 w-3" />
+                {drillState.grain === 'DAY' ? (
+                  <button onClick={() => onDrillUp('MONTH')} className="hover:text-primary transition-colors">
+                    {drillState.year}
+                  </button>
+                ) : (
+                  <span className="text-foreground font-medium">{drillState.year}</span>
+                )}
+              </>
+            )}
+            {drillState.month != null && (
+              <>
+                <ChevronRight className="h-3 w-3" />
+                <span className="text-foreground font-medium">{MONTH_NAMES[drillState.month - 1]}</span>
+              </>
+            )}
+          </div>
+        )}
+        {/* Dimensional drill breadcrumb */}
+        {dimDrillState && dimDrillConfig && onDimDrillUp && (
+          <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+            <button onClick={onDimDrillUp} className="hover:text-primary transition-colors">
+              All {dimDrillConfig.parentLabel}s
+            </button>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-foreground font-medium">{dimDrillState.parentValue}</span>
+          </div>
+        )}
+      </div>
 
       {state.status === 'loading' && (
-        <Skeleton className="h-48 w-full rounded-lg" />
+        <div className="h-48 w-full rounded-lg flex items-center justify-center bg-muted/30">
+          <div className="flex flex-col items-center gap-2">
+            <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-[11px] text-muted-foreground">Loading...</span>
+          </div>
+        </div>
       )}
 
       {state.status === 'error' && (
@@ -945,14 +1035,24 @@ function ChartCard({
 
       {state.status === 'success' && state.data && (
         <>
-          {widget.type === 'line' && <RechartLine data={state.data} />}
-          {widget.type === 'multiline' && <RechartMultiLine data={state.data} />}
-          {widget.type === 'bar' && <RechartBar data={state.data} />}
+          {widget.type === 'line' && <RechartLine data={state.data} onDrillDown={canDrill ? onDrillDown : undefined} grain={grain} />}
+          {widget.type === 'multiline' && <RechartMultiLine data={state.data} onDrillDown={canDrill ? onDrillDown : undefined} grain={grain} />}
+          {widget.type === 'bar' && <RechartBar data={state.data} onDrillDown={canDimDrill ? onDimDrillDown : undefined} />}
           {widget.type === 'donut' && <RechartDonut data={state.data} />}
-          {widget.type === 'area' && <RechartArea data={state.data} />}
+          {widget.type === 'area' && <RechartArea data={state.data} onDrillDown={canDrill ? onDrillDown : undefined} grain={grain} />}
           {widget.type === 'composed' && <RechartComposed data={state.data} />}
           {widget.type === 'treemap' && <RechartTreemap data={state.data} />}
           {widget.type === 'table' && <DashboardTable data={state.data} />}
+          {canDrill && (
+            <p className="text-[10px] text-muted-foreground/60 text-center mt-2 select-none">
+              Click on a data point to drill into {grain === 'YEAR' ? 'months' : 'days'}
+            </p>
+          )}
+          {canDimDrill && dimDrillConfig && (
+            <p className="text-[10px] text-muted-foreground/60 text-center mt-2 select-none">
+              Click on a bar to drill into {dimDrillConfig.childLabel.toLowerCase()}s
+            </p>
+          )}
         </>
       )}
     </div>
@@ -984,8 +1084,15 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
 
   const widgets = useMemo(() => buildWidgets(appliedFilters), [appliedFilters])
   const [widgetStates, setWidgetStates] = useState<Map<string, WidgetState>>(new Map())
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [drillStates, setDrillStates] = useState<Map<string, DrillState>>(new Map())
+  const [dimDrillStates, setDimDrillStates] = useState<Map<string, DimDrillState>>(new Map())
+  const [bulkLoading, setBulkLoading] = useState(false)
   const extractedRef = useRef(new Map<string, Set<string>>())
+
+  // Drill cache: widgetId → cacheKey → WidgetState (instant back-navigation)
+  const drillCacheRef = useRef(new Map<string, Map<string, WidgetState>>())
+  const drillStatesRef = useRef(drillStates)
+  drillStatesRef.current = drillStates
 
   // Initialize filter dropdown values from catalog sample_values
   useEffect(() => {
@@ -1040,7 +1147,64 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
     }
   }, [onDimensionValues])
 
-  const loadWidget = useCallback(async (widget: DashboardWidget) => {
+  const loadAll = useCallback(async (resetDrill = false) => {
+    if (resetDrill) {
+      setDrillStates(new Map())
+      drillStatesRef.current = new Map()
+      setDimDrillStates(new Map())
+    }
+    drillCacheRef.current.clear()
+    setBulkLoading(true)
+
+    // Build queries: use drill query for widgets at a drill level, base query otherwise
+    const currentDrills = drillStatesRef.current
+    const queries = widgets.map((w) => {
+      const drill = currentDrills.get(w.id)
+      const drillSql = drill ? buildDrillQuery(w.id, drill, appliedFilters) : null
+      return { id: w.id, sql: drillSql ?? w.sql }
+    })
+
+    setWidgetStates((prev) => {
+      const next = new Map(prev)
+      for (const w of widgets) {
+        next.set(w.id, { status: 'loading', data: null, error: null })
+      }
+      return next
+    })
+
+    try {
+      const batchResults = await executeBatch(queries)
+
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        for (const w of widgets) {
+          const result = batchResults[w.id]
+          if (!result) {
+            next.set(w.id, { status: 'error', data: null, error: 'No result returned' })
+          } else if (result.error) {
+            next.set(w.id, { status: 'error', data: null, error: result.error })
+          } else {
+            const data: QueryResult = { columns: result.columns!, rows: result.rows! }
+            emitDimensionValues(data)
+            next.set(w.id, { status: 'success', data, error: null })
+          }
+        }
+        return next
+      })
+    } catch (err: any) {
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        for (const w of widgets) {
+          next.set(w.id, { status: 'error', data: null, error: err?.message || 'Batch query failed' })
+        }
+        return next
+      })
+    } finally {
+      setBulkLoading(false)
+    }
+  }, [widgets, emitDimensionValues, appliedFilters])
+
+  const retryWidget = useCallback(async (widget: DashboardWidget) => {
     setWidgetStates((prev) => {
       const next = new Map(prev)
       next.set(widget.id, { status: 'loading', data: null, error: null })
@@ -1048,40 +1212,215 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
     })
 
     try {
-      const data = await executeQuery(widget.sql)
-      emitDimensionValues(data)
+      const batchResults = await executeBatch([{ id: widget.id, sql: widget.sql }])
+      const result = batchResults[widget.id]
       setWidgetStates((prev) => {
         const next = new Map(prev)
-        next.set(widget.id, { status: 'success', data, error: null })
+        if (result?.error) {
+          next.set(widget.id, { status: 'error', data: null, error: result.error })
+        } else if (result) {
+          const data: QueryResult = { columns: result.columns!, rows: result.rows! }
+          emitDimensionValues(data)
+          next.set(widget.id, { status: 'success', data, error: null })
+        } else {
+          next.set(widget.id, { status: 'error', data: null, error: 'No result returned' })
+        }
         return next
       })
     } catch (err: any) {
       setWidgetStates((prev) => {
         const next = new Map(prev)
-        next.set(widget.id, {
-          status: 'error',
-          data: null,
-          error: err?.message || 'Query failed',
-        })
+        next.set(widget.id, { status: 'error', data: null, error: err?.message || 'Query failed' })
         return next
       })
     }
   }, [emitDimensionValues])
 
-  const loadAll = useCallback(() => {
-    for (const w of widgets) {
-      loadWidget(w)
-    }
-  }, [widgets, loadWidget])
+  const handleDrillDown = useCallback(async (widgetId: string, dateValue: string) => {
+    const currentDrill = drillStates.get(widgetId) ?? { grain: 'YEAR' as TimeGrain }
+    const d = new Date(dateValue)
+    if (isNaN(d.getTime())) return
 
+    let newDrill: DrillState
+    if (currentDrill.grain === 'YEAR') {
+      newDrill = { grain: 'MONTH', year: d.getFullYear() }
+    } else if (currentDrill.grain === 'MONTH') {
+      newDrill = { grain: 'DAY', year: currentDrill.year!, month: d.getMonth() + 1 }
+    } else {
+      return
+    }
+
+    // Cache current state before drilling deeper
+    const currentState = widgetStates.get(widgetId)
+    if (currentState?.status === 'success') {
+      const wCache = drillCacheRef.current.get(widgetId) ?? new Map()
+      wCache.set(drillCacheKey(currentDrill), currentState)
+      drillCacheRef.current.set(widgetId, wCache)
+    }
+
+    setDrillStates((prev) => { const next = new Map(prev); next.set(widgetId, newDrill); return next })
+    const sql = buildDrillQuery(widgetId, newDrill, appliedFilters)
+    if (!sql) return
+
+    setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'loading', data: null, error: null }); return next })
+
+    try {
+      const result = await executeBatch([{ id: widgetId, sql }])
+      const item = result[widgetId]
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        if (item?.error) {
+          next.set(widgetId, { status: 'error', data: null, error: item.error })
+        } else if (item) {
+          const state: WidgetState = { status: 'success', data: { columns: item.columns!, rows: item.rows! }, error: null }
+          next.set(widgetId, state)
+          // Also cache the new drill level
+          const wCache = drillCacheRef.current.get(widgetId) ?? new Map()
+          wCache.set(drillCacheKey(newDrill), state)
+          drillCacheRef.current.set(widgetId, wCache)
+        }
+        return next
+      })
+    } catch (err: any) {
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'error', data: null, error: err?.message || 'Drill query failed' }); return next })
+    }
+  }, [drillStates, appliedFilters, widgetStates])
+
+  const handleDrillUp = useCallback(async (widgetId: string, targetGrain?: TimeGrain) => {
+    const currentDrill = drillStates.get(widgetId)
+    if (!currentDrill || currentDrill.grain === 'YEAR') return
+
+    let newDrill: DrillState | null
+    if (targetGrain === 'YEAR' || currentDrill.grain === 'MONTH') {
+      newDrill = null // back to top level
+    } else {
+      newDrill = { grain: 'MONTH', year: currentDrill.year }
+    }
+
+    // Check cache first — instant back-navigation
+    const cacheKey = drillCacheKey(newDrill)
+    const cached = drillCacheRef.current.get(widgetId)?.get(cacheKey)
+    if (cached?.status === 'success') {
+      setDrillStates((prev) => {
+        const next = new Map(prev)
+        if (newDrill) next.set(widgetId, newDrill)
+        else next.delete(widgetId)
+        return next
+      })
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, cached); return next })
+      return
+    }
+
+    setDrillStates((prev) => {
+      const next = new Map(prev)
+      if (newDrill) next.set(widgetId, newDrill)
+      else next.delete(widgetId)
+      return next
+    })
+
+    const sql = newDrill
+      ? buildDrillQuery(widgetId, newDrill, appliedFilters)
+      : widgets.find((w) => w.id === widgetId)?.sql
+    if (!sql) return
+
+    setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'loading', data: null, error: null }); return next })
+
+    try {
+      const result = await executeBatch([{ id: widgetId, sql }])
+      const item = result[widgetId]
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        if (item?.error) {
+          next.set(widgetId, { status: 'error', data: null, error: item.error })
+        } else if (item) {
+          next.set(widgetId, { status: 'success', data: { columns: item.columns!, rows: item.rows! }, error: null })
+        }
+        return next
+      })
+    } catch (err: any) {
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'error', data: null, error: err?.message || 'Drill query failed' }); return next })
+    }
+  }, [drillStates, appliedFilters, widgets])
+
+  /* ── Dimensional drill (Region → Nation) ── */
+
+  const handleDimDrillDown = useCallback(async (widgetId: string, categoryValue: string) => {
+    const sql = buildDimDrillQuery(widgetId, categoryValue, appliedFilters)
+    if (!sql) return
+
+    // Cache current (parent) state
+    const currentState = widgetStates.get(widgetId)
+    if (currentState?.status === 'success') {
+      const wCache = drillCacheRef.current.get(widgetId) ?? new Map()
+      wCache.set('dim:parent', currentState)
+      drillCacheRef.current.set(widgetId, wCache)
+    }
+
+    setDimDrillStates((prev) => { const next = new Map(prev); next.set(widgetId, { parentValue: categoryValue }); return next })
+    setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'loading', data: null, error: null }); return next })
+
+    try {
+      const result = await executeBatch([{ id: widgetId, sql }])
+      const item = result[widgetId]
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        if (item?.error) {
+          next.set(widgetId, { status: 'error', data: null, error: item.error })
+        } else if (item) {
+          next.set(widgetId, { status: 'success', data: { columns: item.columns!, rows: item.rows! }, error: null })
+        }
+        return next
+      })
+    } catch (err: any) {
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'error', data: null, error: err?.message || 'Drill query failed' }); return next })
+    }
+  }, [appliedFilters, widgetStates])
+
+  const handleDimDrillUp = useCallback(async (widgetId: string) => {
+    setDimDrillStates((prev) => { const next = new Map(prev); next.delete(widgetId); return next })
+
+    // Restore from cache
+    const cached = drillCacheRef.current.get(widgetId)?.get('dim:parent')
+    if (cached?.status === 'success') {
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, cached); return next })
+      return
+    }
+
+    // Fallback: re-query original
+    const widget = widgets.find((w) => w.id === widgetId)
+    if (!widget) return
+    setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'loading', data: null, error: null }); return next })
+    try {
+      const result = await executeBatch([{ id: widgetId, sql: widget.sql }])
+      const item = result[widgetId]
+      setWidgetStates((prev) => {
+        const next = new Map(prev)
+        if (item?.error) {
+          next.set(widgetId, { status: 'error', data: null, error: item.error })
+        } else if (item) {
+          next.set(widgetId, { status: 'success', data: { columns: item.columns!, rows: item.rows! }, error: null })
+        }
+        return next
+      })
+    } catch (err: any) {
+      setWidgetStates((prev) => { const next = new Map(prev); next.set(widgetId, { status: 'error', data: null, error: err?.message || 'Drill query failed' }); return next })
+    }
+  }, [widgets])
+
+  // Reload when widgets change (filter apply) — preserves drill level
   useEffect(() => {
     loadAll()
-  }, [loadAll, refreshKey])
+  }, [loadAll])
+
+  // Manual refresh resets drill to top level
+  const handleRefresh = useCallback(() => {
+    loadAll(true)
+  }, [loadAll])
 
   const kpiWidgets = widgets.filter((w) => w.type === 'kpi')
   const chartWidgets = widgets.filter((w) => w.type !== 'kpi' && w.type !== 'table')
   const tableWidgets = widgets.filter((w) => w.type === 'table')
-  const isLoading = Array.from(widgetStates.values()).some((s) => s.status === 'loading')
+  const anyLoading = Array.from(widgetStates.values()).some((s) => s.status === 'loading')
 
   // ── Filter helpers ──
 
@@ -1135,7 +1474,15 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
   }, [pendingFilters, appliedFilters])
 
   return (
-    <main className="flex-1 bg-background overflow-hidden">
+    <main className="flex-1 bg-background overflow-hidden relative">
+      {bulkLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+            <span className="text-sm font-medium text-muted-foreground">Loading dashboard...</span>
+          </div>
+        </div>
+      )}
       <ScrollArea className="h-full">
         <div className="p-6 max-w-[1600px] mx-auto space-y-5">
           {/* Header */}
@@ -1149,16 +1496,16 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
               </p>
             </div>
             <button
-              onClick={() => setRefreshKey((k) => k + 1)}
-              disabled={isLoading}
+              onClick={handleRefresh}
+              disabled={anyLoading}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                isLoading
+                anyLoading
                   ? 'bg-muted text-muted-foreground cursor-not-allowed'
                   : 'bg-foreground/8 text-foreground hover:bg-foreground/12'
               )}
             >
-              <RefreshCw className={cn('h-3 w-3', isLoading && 'animate-spin')} />
+              <RefreshCw className={cn('h-3 w-3', anyLoading && 'animate-spin')} />
               Refresh
             </button>
           </div>
@@ -1274,10 +1621,10 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
                 {hasUnappliedChanges && (
                   <button
                     onClick={applyFilters}
-                    disabled={isLoading}
+                    disabled={anyLoading}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                      isLoading
+                      anyLoading
                         ? 'bg-muted text-muted-foreground cursor-not-allowed'
                         : 'bg-primary text-primary-foreground hover:opacity-90'
                     )}
@@ -1311,7 +1658,14 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
                   key={w.id}
                   widget={w}
                   state={widgetStates.get(w.id) ?? { status: 'loading', data: null, error: null }}
-                  onRetry={() => loadWidget(w)}
+                  onRetry={() => retryWidget(w)}
+                  drillState={drillStates.get(w.id)}
+                  onDrillDown={DRILLABLE_WIDGETS.has(w.id) ? (dateValue) => handleDrillDown(w.id, dateValue) : undefined}
+                  onDrillUp={DRILLABLE_WIDGETS.has(w.id) ? (targetGrain) => handleDrillUp(w.id, targetGrain) : undefined}
+                  dimDrillState={dimDrillStates.get(w.id)}
+                  dimDrillConfig={DIM_DRILLABLE_WIDGETS.has(w.id) ? getDimDrillConfig(w.id) : null}
+                  onDimDrillDown={DIM_DRILLABLE_WIDGETS.has(w.id) ? (val) => handleDimDrillDown(w.id, val) : undefined}
+                  onDimDrillUp={DIM_DRILLABLE_WIDGETS.has(w.id) ? () => handleDimDrillUp(w.id) : undefined}
                 />
               ))}
             </div>
@@ -1325,7 +1679,7 @@ export function DashboardView({ catalog, onDimensionValues }: DashboardViewProps
                   key={w.id}
                   widget={w}
                   state={widgetStates.get(w.id) ?? { status: 'loading', data: null, error: null }}
-                  onRetry={() => loadWidget(w)}
+                  onRetry={() => retryWidget(w)}
                 />
               ))}
             </div>

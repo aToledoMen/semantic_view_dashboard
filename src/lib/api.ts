@@ -1,7 +1,7 @@
 import Domo from 'ryuu.js'
 import type { CatalogResponse } from '@/types/catalog'
 import type { ExploreResult } from '@/types/explore'
-import type { QueryResult } from '@/types/dashboard'
+import type { QueryResult, BatchQuery, BatchResults } from '@/types/dashboard'
 import { SNOWFLAKE_CONFIG } from '@/config'
 
 const CE_BASE = '/domo/codeengine/v2/packages'
@@ -91,6 +91,50 @@ export async function executeQuery(sql: string): Promise<QueryResult> {
     return response.result
   } catch (error) {
     console.error('[API] executeQuery ✗ error:', error)
+    throw error
+  }
+}
+
+export async function executeBatch(queries: BatchQuery[]): Promise<BatchResults> {
+  const url = `${CE_BASE}/executeBatchSqlApi`
+  const body = {
+    snowflakeAccount: SNOWFLAKE_CONFIG.account,
+    snowflakeDatabase: SNOWFLAKE_CONFIG.database,
+    snowflakeSchema: SNOWFLAKE_CONFIG.schema,
+    snowflakeWH: SNOWFLAKE_CONFIG.warehouse,
+    queries: queries.map(q => ({ ...q, sql: q.sql.replace(/\n/g, ' ') })),
+  }
+  console.log(`[API] executeBatch → POST ${url} (${queries.length} queries)`)
+
+  try {
+    const response = await Domo.post<any>(url, body)
+    console.log('[API] executeBatch ← raw response:', response)
+
+    // Unwrap: CE may double-wrap as { result: { result: { ... } } }
+    let data = response.result ?? response
+    if (data.result && !data.columns) data = data.result
+
+    // Convert string values to numbers where possible
+    for (const key of Object.keys(data)) {
+      const item = data[key]
+      if (item?.rows) {
+        item.rows = item.rows.map((row: Record<string, unknown>) => {
+          const converted: Record<string, unknown> = {}
+          for (const [col, val] of Object.entries(row)) {
+            if (typeof val === 'string' && val !== '' && !isNaN(Number(val))) {
+              converted[col] = Number(val)
+            } else {
+              converted[col] = val
+            }
+          }
+          return converted
+        })
+      }
+    }
+
+    return data
+  } catch (error) {
+    console.error('[API] executeBatch ✗ error:', error)
     throw error
   }
 }

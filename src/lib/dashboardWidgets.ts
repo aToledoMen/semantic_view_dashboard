@@ -1,4 +1,4 @@
-import type { DashboardWidget } from '@/types/dashboard'
+import type { DashboardWidget, DrillState } from '@/types/dashboard'
 import { SNOWFLAKE_CONFIG } from '@/config'
 
 export type DashboardFilters = Record<string, string[]>
@@ -88,6 +88,129 @@ function svQueryByYearAndDim(
 ): string {
   const inner = svQuery([metric], [timeDim, dim], undefined, undefined, filters)
   return `SELECT DATE_TRUNC('YEAR', ${timeDim}) AS YEAR, ${dim}, SUM(${metric}) AS ${metric}\nFROM (${inner})\nGROUP BY YEAR, ${dim}\nORDER BY YEAR`
+}
+
+/* ── Drill-down query builders ── */
+
+function buildDrillWhere(timeDim: string, drillState: DrillState): string {
+  if (drillState.grain === 'MONTH' && drillState.year != null) {
+    return `WHERE ${timeDim} >= '${drillState.year}-01-01' AND ${timeDim} < '${drillState.year + 1}-01-01'`
+  }
+  if (drillState.grain === 'DAY' && drillState.year != null && drillState.month != null) {
+    const mm = String(drillState.month).padStart(2, '0')
+    let nextYear = drillState.year
+    let nextMonth = drillState.month + 1
+    if (nextMonth > 12) { nextYear++; nextMonth = 1 }
+    const nmm = String(nextMonth).padStart(2, '0')
+    return `WHERE ${timeDim} >= '${drillState.year}-${mm}-01' AND ${timeDim} < '${nextYear}-${nmm}-01'`
+  }
+  return ''
+}
+
+function svQueryByGrain(
+  metric: string,
+  timeDim: string,
+  alias: string,
+  drillState: DrillState,
+  filters?: DashboardFilters
+): string {
+  const inner = svQuery([metric], [timeDim], undefined, undefined, filters)
+  const parts = [
+    `SELECT DATE_TRUNC('${drillState.grain}', ${timeDim}) AS PERIOD, SUM(${metric}) AS ${alias}`,
+    `FROM (${inner})`,
+  ]
+  const where = buildDrillWhere(timeDim, drillState)
+  if (where) parts.push(where)
+  parts.push('GROUP BY PERIOD', 'ORDER BY PERIOD')
+  return parts.join('\n')
+}
+
+function svQueryByGrainAndDim(
+  metric: string,
+  timeDim: string,
+  dim: string,
+  drillState: DrillState,
+  filters?: DashboardFilters
+): string {
+  const inner = svQuery([metric], [timeDim, dim], undefined, undefined, filters)
+  const parts = [
+    `SELECT DATE_TRUNC('${drillState.grain}', ${timeDim}) AS PERIOD, ${dim}, SUM(${metric}) AS ${metric}`,
+    `FROM (${inner})`,
+  ]
+  const where = buildDrillWhere(timeDim, drillState)
+  if (where) parts.push(where)
+  parts.push(`GROUP BY PERIOD, ${dim}`, 'ORDER BY PERIOD')
+  return parts.join('\n')
+}
+
+const DRILL_CONFIGS: Record<string, {
+  type: 'single' | 'dim'
+  metric: string
+  timeDim: string
+  alias?: string
+  dim?: string
+}> = {
+  'chart-orders-over-time': { type: 'dim', metric: 'ORDER_COUNT', timeDim: 'ORDER_DATE', dim: 'CUSTOMER_REGION_NAME' },
+  'chart-avg-value-trend': { type: 'single', metric: 'ORDER_AVERAGE_VALUE', timeDim: 'ORDER_DATE', alias: 'ORDER_AVERAGE_VALUE' },
+  'chart-orders-area': { type: 'single', metric: 'ORDER_COUNT', timeDim: 'ORDER_DATE', alias: 'ORDER_COUNT' },
+}
+
+export const DRILLABLE_WIDGETS = new Set(Object.keys(DRILL_CONFIGS))
+
+export function buildDrillQuery(
+  widgetId: string,
+  drillState: DrillState,
+  dashFilters?: DashboardFilters
+): string | null {
+  const config = DRILL_CONFIGS[widgetId]
+  if (!config) return null
+  const f = dashFilters && Object.keys(dashFilters).length > 0 ? dashFilters : undefined
+  if (config.type === 'dim') {
+    return svQueryByGrainAndDim(config.metric, config.timeDim, config.dim!, drillState, f)
+  }
+  return svQueryByGrain(config.metric, config.timeDim, config.alias!, drillState, f)
+}
+
+/* ── Dimensional drill (Region → Nation) ── */
+
+const DIM_DRILL_CONFIGS: Record<string, {
+  metric: string
+  parentDim: string
+  childDim: string
+  parentLabel: string
+  childLabel: string
+}> = {
+  'chart-orders-by-region': {
+    metric: 'ORDER_COUNT',
+    parentDim: 'CUSTOMER_REGION_NAME',
+    childDim: 'CUSTOMER_NATION_NAME',
+    parentLabel: 'Region',
+    childLabel: 'Nation',
+  },
+  'chart-customers-by-region': {
+    metric: 'CUSTOMER_COUNT',
+    parentDim: 'CUSTOMER_REGION_NAME',
+    childDim: 'CUSTOMER_NATION_NAME',
+    parentLabel: 'Region',
+    childLabel: 'Nation',
+  },
+}
+
+export const DIM_DRILLABLE_WIDGETS = new Set(Object.keys(DIM_DRILL_CONFIGS))
+
+export function getDimDrillConfig(widgetId: string) {
+  return DIM_DRILL_CONFIGS[widgetId] ?? null
+}
+
+export function buildDimDrillQuery(
+  widgetId: string,
+  parentValue: string,
+  dashFilters?: DashboardFilters
+): string | null {
+  const config = DIM_DRILL_CONFIGS[widgetId]
+  if (!config) return null
+  const filters: DashboardFilters = { ...dashFilters, [config.parentDim]: [parentValue] }
+  return svQuery([config.metric], [config.childDim], `${config.metric} DESC`, undefined, filters)
 }
 
 /**
