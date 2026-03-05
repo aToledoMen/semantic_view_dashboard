@@ -12,6 +12,7 @@ export interface ExploreResult {
   chart: VegaLiteSpec
   data: string[][]
   prompt: string
+  sql?: string
   messageId: string | null
 }
 
@@ -21,4 +22,13 @@ export interface ExploreState {
   status: ExploreStatus
   result: ExploreResult | null
   error: string | null
+}
+
+export interface HistoryEntry {
+  id: string
+  timestamp: number
+  metrics: string[]
+  dimensions: string[]
+  timeGrain: string | null
+  result: ExploreResult
 }

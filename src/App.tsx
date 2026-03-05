@@ -5,7 +5,7 @@ import { MainContent } from '@/components/MainContent'
 import { DashboardView } from '@/components/DashboardView'
 import { fetchCatalog, exploreData } from '@/lib/api'
 import type { CatalogResponse } from '@/types/catalog'
-import type { ExploreState, MetricFilter } from '@/types/explore'
+import type { ExploreState, MetricFilter, HistoryEntry } from '@/types/explore'
 
 function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard')
@@ -25,6 +25,8 @@ function App() {
     result: null,
     error: null,
   })
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null)
 
   const handleDashboardDimensionValues = useCallback((values: Map<string, string[]>) => {
     setKnownDimensionValues((prev) => {
@@ -61,6 +63,7 @@ function App() {
   async function handleExplore() {
     if (!canExplore) return
 
+    setViewingHistoryId(null)
     setExploreState({ status: 'loading', result: null, error: null })
 
     const dimFilters: Record<string, string[]> = {}
@@ -74,14 +77,28 @@ function App() {
     })
 
     try {
+      const metricsArr = Array.from(selectedMetrics)
+      const dimensionsArr = Array.from(selectedDimensions)
       const result = await exploreData(
-        Array.from(selectedMetrics),
-        Array.from(selectedDimensions),
+        metricsArr,
+        dimensionsArr,
         selectedTimeGrain,
         Object.keys(dimFilters).length > 0 ? dimFilters : undefined,
         Object.keys(mFilters).length > 0 ? mFilters : undefined
       )
       setExploreState({ status: 'success', result, error: null })
+      setViewingHistoryId(null)
+      setHistory((prev) => [
+        {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          metrics: metricsArr,
+          dimensions: dimensionsArr,
+          timeGrain: selectedTimeGrain,
+          result,
+        },
+        ...prev,
+      ])
       extractDimensionValues(result)
     } catch (err: any) {
       setExploreState({
@@ -198,6 +215,24 @@ function App() {
     })
   }
 
+  function handleViewHistory(id: string) {
+    setViewingHistoryId(id)
+  }
+
+  function handleClearHistory() {
+    setHistory([])
+    setViewingHistoryId(null)
+  }
+
+  const displayState: ExploreState = viewingHistoryId
+    ? (() => {
+        const entry = history.find((h) => h.id === viewingHistoryId)
+        return entry
+          ? { status: 'success', result: entry.result, error: null }
+          : exploreState
+      })()
+    : exploreState
+
   const totalSelected =
     selectedMetrics.size +
     selectedDimensions.size +
@@ -263,11 +298,16 @@ function App() {
             canExplore={canExplore}
             exploring={exploreState.status === 'loading'}
             onExplore={handleExplore}
+            history={history}
+            viewingHistoryId={viewingHistoryId}
+            onViewHistory={handleViewHistory}
+            onClearHistory={handleClearHistory}
           />
           <MainContent
             selectedCount={totalSelected}
-            exploreState={exploreState}
+            exploreState={displayState}
             canExplore={canExplore}
+            isViewingHistory={viewingHistoryId !== null}
           />
         </div>
       ) : (

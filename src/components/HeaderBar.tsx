@@ -17,7 +17,7 @@ export function HeaderBar({ semanticView, loading, activeTab, onTabChange }: Hea
       <div className="flex items-center gap-2.5">
         <Snowflake className="h-6 w-6 text-sidebar-accent" />
         <h1 className="text-base font-semibold text-white tracking-tight">
-          Snowflake BI
+          Domo Snowflake Semantic View BI
         </h1>
       </div>
 

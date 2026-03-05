@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Snowflake, BarChart3, Table2, FileText, AlertCircle, Check } from 'lucide-react'
+import { Snowflake, BarChart3, Table2, FileText, AlertCircle, Check, Code, ChevronDown, History } from 'lucide-react'
 import { VegaChart } from './VegaChart'
 import { DataTable } from './DataTable'
+import { cn } from '@/lib/utils'
 import { simpleMarkdownToHtml } from '@/lib/markdown'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -141,13 +142,79 @@ function LoadingView() {
   )
 }
 
+function CollapsibleSection({
+  icon,
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  icon: React.ReactNode
+  title: React.ReactNode
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <section className="bg-card rounded-lg border border-border">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 px-5 py-3 text-left hover:bg-muted/50 transition-colors rounded-lg"
+      >
+        {icon}
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <ChevronDown className={cn(
+          "h-4 w-4 text-muted-foreground ml-auto transition-transform",
+          isOpen && "rotate-180"
+        )} />
+      </button>
+      {isOpen && (
+        <div className="px-5 pb-4 pt-0">
+          {children}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function QueryDetails({ sql }: { sql?: string }) {
+  const [isOpen, setIsOpen] = useState(false)
+  if (!sql) return null
+
+  return (
+    <section className="bg-card rounded-lg border border-border">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 px-5 py-3 text-left hover:bg-muted/50 transition-colors rounded-lg"
+      >
+        <Code className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold text-muted-foreground">
+          Query Details
+        </span>
+        <ChevronDown className={cn(
+          "h-4 w-4 text-muted-foreground ml-auto transition-transform",
+          isOpen && "rotate-180"
+        )} />
+      </button>
+      {isOpen && sql && (
+        <div className="px-5 pb-4 pt-0">
+          <pre className="text-xs text-green-400 bg-[#0d1117] rounded-md p-4 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed border border-[#1a2332]">
+            {sql}
+          </pre>
+        </div>
+      )}
+    </section>
+  )
+}
+
 interface MainContentProps {
   selectedCount: number
   exploreState: ExploreState
   canExplore: boolean
+  isViewingHistory?: boolean
 }
 
-export function MainContent({ selectedCount, exploreState, canExplore }: MainContentProps) {
+export function MainContent({ selectedCount, exploreState, canExplore, isViewingHistory }: MainContentProps) {
   const { status, result, error } = exploreState
 
   // Loading
@@ -176,49 +243,59 @@ export function MainContent({ selectedCount, exploreState, canExplore }: MainCon
       <main className="flex-1 bg-background overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+            {/* History banner */}
+            {isViewingHistory && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-muted/50 border border-border">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground font-medium">
+                  Viewing saved result
+                </span>
+              </div>
+            )}
+
             {/* Text Insights */}
             {result.text && (
-              <section className="bg-card rounded-lg border border-border p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">Insights</h3>
-                </div>
+              <CollapsibleSection
+                icon={<FileText className="h-4 w-4 text-primary" />}
+                title="Insights"
+              >
                 <div
                   className="text-sm text-muted-foreground leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(result.text) }}
                 />
-              </section>
+              </CollapsibleSection>
             )}
 
             {/* Chart */}
             {result.chart && (
-              <section className="bg-card rounded-lg border border-border p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {(result.chart.title as string) || 'Chart'}
-                  </h3>
-                </div>
+              <CollapsibleSection
+                icon={<BarChart3 className="h-4 w-4 text-primary" />}
+                title={(result.chart.title as string) || 'Chart'}
+              >
                 <VegaChart spec={result.chart} className="w-full" />
-              </section>
+              </CollapsibleSection>
             )}
 
             {/* Data Table */}
-            {result.chart && (
-              <section className="bg-card rounded-lg border border-border p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Table2 className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Data
-                    {result.data && (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {result.data.length} rows
-                      </span>
-                    )}
-                  </h3>
-                </div>
-                <DataTable chart={result.chart} />
-              </section>
+            {(result.chart || (result.data && result.data.length > 1)) && (
+              <CollapsibleSection
+                icon={<Table2 className="h-4 w-4 text-primary" />}
+                title={<>
+                  Data
+                  {result.data && result.data.length > 1 && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {result.data.length - 1} rows
+                    </span>
+                  )}
+                </>}
+              >
+                <DataTable chart={result.chart} rawData={result.data} />
+              </CollapsibleSection>
+            )}
+
+            {/* Query Details */}
+            {result.sql && (
+              <QueryDetails sql={result.sql} />
             )}
           </div>
         </ScrollArea>

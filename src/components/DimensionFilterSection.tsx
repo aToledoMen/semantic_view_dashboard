@@ -118,7 +118,7 @@ function DimensionFilterGroup({
               isExpanded && 'rotate-90'
             )}
           />
-          <span title={dimension.display_name || undefined}>{dimension.name}</span>
+          <span title={dimension.description || undefined}>{dimension.name}</span>
           {hasFilters && (
             <span className="text-[10px] bg-sidebar-accent text-white px-1.5 py-0 rounded-full min-w-[16px] text-center leading-4">
               {selectedValues.size}

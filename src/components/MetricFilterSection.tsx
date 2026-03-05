@@ -103,7 +103,7 @@ function MetricFilterRow({
               isExpanded && 'rotate-90'
             )}
           />
-          <span title={metric.display_name || undefined}>{metric.name}</span>
+          <span title={metric.description || undefined}>{metric.name}</span>
           {filter && (
             <span className="text-[10px] bg-sidebar-accent text-white px-1.5 py-0 rounded-full leading-4">
               {filter.op} {filter.val}

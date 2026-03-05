@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { Hash, Layers, Calendar, Clock, GripVertical, Play, Loader2 } from 'lucide-react'
+import { Hash, Layers, Calendar, Clock, GripVertical, Play, Loader2, History, Trash2, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,7 @@ import { SidebarSection } from './SidebarSection'
 import { DimensionFilterSection } from './DimensionFilterSection'
 import { MetricFilterSection } from './MetricFilterSection'
 import type { CatalogResponse } from '@/types/catalog'
-import type { MetricFilter } from '@/types/explore'
+import type { MetricFilter, HistoryEntry } from '@/types/explore'
 
 interface SidebarProps {
   catalog: CatalogResponse | null
@@ -30,6 +30,10 @@ interface SidebarProps {
   canExplore: boolean
   exploring: boolean
   onExplore: () => void
+  history: HistoryEntry[]
+  viewingHistoryId: string | null
+  onViewHistory: (id: string) => void
+  onClearHistory: () => void
 }
 
 const dimensionTypeBadgeStyles: Record<string, string> = {
@@ -47,6 +51,90 @@ function LoadingSkeleton() {
           <Skeleton className="h-3.5 flex-1 bg-sidebar-muted rounded" />
         </div>
       ))}
+    </div>
+  )
+}
+
+function formatRelativeTime(timestamp: number) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
+function HistoryPanel({
+  history,
+  viewingHistoryId,
+  onViewHistory,
+  onClearHistory,
+}: {
+  history: HistoryEntry[]
+  viewingHistoryId: string | null
+  onViewHistory: (id: string) => void
+  onClearHistory: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(true)
+
+  return (
+    <div className="shrink-0 border-t border-sidebar-border bg-[#1a1f2e]">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-sidebar-muted/50 transition-colors"
+      >
+        <History className="h-3.5 w-3.5 text-sidebar-accent" />
+        <span className="text-xs font-medium text-sidebar-foreground/70">
+          History
+        </span>
+        <span className="text-[10px] text-sidebar-foreground/40">
+          {history.length}
+        </span>
+        <ChevronUp className={cn(
+          'h-3 w-3 text-sidebar-foreground/40 ml-auto transition-transform',
+          !isOpen && 'rotate-180'
+        )} />
+      </button>
+      {isOpen && (
+        <div className="px-3 pb-2">
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={onClearHistory}
+              className="flex items-center gap-1 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+              Clear
+            </button>
+          </div>
+          <div className="space-y-1 max-h-[160px] overflow-y-auto">
+            {history.map((entry) => (
+              <button
+                key={entry.id}
+                onClick={() => onViewHistory(entry.id)}
+                className={cn(
+                  'w-full text-left px-2 py-1.5 rounded text-xs transition-colors',
+                  viewingHistoryId === entry.id
+                    ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-muted hover:text-sidebar-foreground'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">
+                    {entry.metrics.join(', ')}
+                  </span>
+                  <span className="text-[10px] text-sidebar-foreground/40 shrink-0">
+                    {formatRelativeTime(entry.timestamp)}
+                  </span>
+                </div>
+                <div className="text-[10px] text-sidebar-foreground/40 truncate mt-0.5">
+                  by {entry.dimensions.join(', ')}
+                  {entry.timeGrain ? ` (${entry.timeGrain})` : ''}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -71,6 +159,10 @@ export function Sidebar({
   canExplore,
   exploring,
   onExplore,
+  history,
+  viewingHistoryId,
+  onViewHistory,
+  onClearHistory,
 }: SidebarProps) {
   const [width, setWidth] = useState(400)
   const [metricsSearch, setMetricsSearch] = useState('')
@@ -143,7 +235,7 @@ export function Sidebar({
                 />
                 <span
                   className="text-sm text-sidebar-foreground truncate"
-                  title={metric.display_name || undefined}
+                  title={metric.description || undefined}
                 >
                   {metric.name}
                 </span>
@@ -180,7 +272,7 @@ export function Sidebar({
                 />
                 <span
                   className="text-sm text-sidebar-foreground truncate flex-1"
-                  title={dim.display_name || undefined}
+                  title={dim.description || undefined}
                 >
                   {dim.name}
                 </span>
@@ -275,14 +367,25 @@ export function Sidebar({
               <span
                 key={td.name}
                 className="text-xs text-sidebar-foreground/50 block"
-                title={td.display_name || undefined}
+                title={td.description || undefined}
               >
                 {td.name}
               </span>
             ))}
           </div>
         )}
+
       </div>
+
+      {/* History — fixed bottom zone */}
+      {history.length > 0 && (
+        <HistoryPanel
+          history={history}
+          viewingHistoryId={viewingHistoryId}
+          onViewHistory={onViewHistory}
+          onClearHistory={onClearHistory}
+        />
+      )}
 
       {/* Explore Button */}
       <div className="shrink-0 p-3 border-t border-sidebar-border">
